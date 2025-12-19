@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rima's Love Tree</title>
+    <style>
+        /* CSS Reset & Basic Setup */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #000000;
+            overflow: hidden;
+            /* Prevent scrollbars */
+            height: 100vh;
+            width: 100vw;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        /* Canvas Layer */
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+            /* Behind text */
+        }
+
+        /* Text Container */
+        #text-container {
+            position: absolute;
+            top: 50%;
+            left: 10%;
+            /* Left-aligned but with some padding */
+            transform: translateY(-50%);
+            z-index: 10;
+            /* Above canvas */
+            pointer-events: none;
+            /* Let clicks pass through */
+            color: #ffb7c5;
+            text-shadow: 0px 0px 10px rgba(255, 183, 197, 0.7);
+            font-size: 1.5rem;
+            min-height: 2em;
+            /* Prevent layout shift */
+            white-space: pre-wrap;
+        }
+
+        /* Blinking Cursor Stick */
+        .cursor {
+            display: inline-block;
+            width: 10px;
+            height: 1.5rem;
+            background-color: #ff69b4;
+            animation: blink 0.8s infinite;
+            vertical-align: middle;
+            margin-left: 5px;
+        }
+
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0;
+            }
+        }
+
+        .pulse {
+            animation: textPulse 3s infinite ease-in-out;
+        }
+
+        @keyframes textPulse {
+
+            0%,
+            100% {
+                transform: translateY(-50%) scale(1);
+                text-shadow: 0px 0px 10px rgba(255, 183, 197, 0.7);
+            }
+
+            50% {
+                transform: translateY(-50%) scale(1.05);
+                text-shadow: 0px 0px 20px rgba(255, 183, 197, 1);
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="text-container"><span id="typewriter-text"></span><span class="cursor"></span></div>
+    <canvas id="canvas"></canvas>
+
+    <script>
+        /**
+         * CONFIGURATION
+         */
+        const CONFIG = {
+            colors: {
+                background: "#000000",
+                woodStart: "#4a3f3f",
+                woodEnd: "#2d2424",
+                pinks: ["#ffc0cb", "#ffb7c5", "#ff69b4", "#ff1493", "#db7093"]
+            },
+            textSequence: [
+                "Hey Rima...",
+                "I was thinking about us.",
+                "Just wanted to remind you...",
+                "You mean everything to me.",
+                "I love you. ❤️"
+            ],
+            tree: {
+                maxDepth: 10,
+                branchAngle: 0.3, // Radians
+                growthSpeed: 0.15, // Significantly faster tree growth
+                branchWidthFactor: 0.7,
+                startLength: 150
+            }
+        };
+
+        /**
+         * SETUP CANVAS
+         */
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        /**
+         * GAME STATE
+         */
+        const state = {
+            phase: 0, // 0: Typing, 1: Tree Growth, 2: Blooming
+            frame: 0,
+            frame: 0,
+            wind: 0,
+            interaction: { x: 0, y: 0, active: false }
+        };
+
+        /**
+         * INTERACTION & SPARKLES
+         */
+        const sparkles = [];
+        class Sparkle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * 1.5;
+                this.vy = (Math.random() - 0.5) * 1.5;
+                this.life = 1;
+                this.decay = Math.random() * 0.02 + 0.01;
+                this.color = CONFIG.colors.pinks[Math.floor(Math.random() * CONFIG.colors.pinks.length)];
+                this.size = Math.random() * 2 + 1;
+            }
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life -= this.decay;
+                this.size -= 0.05;
+            }
+            draw(ctx) {
+                if (this.life <= 0) return;
+                ctx.save();
+                ctx.globalAlpha = this.life;
+                ctx.shadowBlur = 5;
+                ctx.shadowColor = this.color;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // Mouse/Touch Events
+        window.addEventListener('mousemove', e => {
+            handleInteraction(e.clientX, e.clientY);
+        });
+        window.addEventListener('touchmove', e => {
+            handleInteraction(e.touches[0].clientX, e.touches[0].clientY);
+        });
+        window.addEventListener('click', e => {
+            spawnHeart(e.clientX, e.clientY);
+            hearts[hearts.length - 1].bloomed = true; // Instant bloom
+            hearts[hearts.length - 1].floating = true; // Instant float
+        });
+
+        function handleInteraction(x, y) {
+            state.interaction.x = x;
+            state.interaction.y = y;
+            state.interaction.active = true;
+
+            // Spawn sparkles on move
+            for (let i = 0; i < 3; i++) {
+                sparkles.push(new Sparkle(x, y));
+            }
+        }
+
+        /**
+         * STARS
+         */
+        const stars = [];
+        class Star {
+            constructor() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height;
+                this.size = Math.random() * 1.5;
+                this.blinkSpeed = Math.random() * 0.05 + 0.01;
+                this.alpha = Math.random();
+                this.direction = 1;
+            }
+            update() {
+                this.alpha += this.blinkSpeed * this.direction;
+                if (this.alpha >= 1) { this.alpha = 1; this.direction = -1; }
+                if (this.alpha <= 0.2) { this.alpha = 0.2; this.direction = 1; }
+            }
+            draw(ctx) {
+                ctx.fillStyle = `rgba(255, 255, 255, ${this.alpha})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function initStars() {
+            for (let i = 0; i < 150; i++) stars.push(new Star());
+        }
+        initStars();
+
+        /**
+         * SHOOTING STARS
+         */
+        const shootingStars = [];
+        class ShootingStar {
+            constructor() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height / 2;
+                this.len = Math.random() * 80 + 10;
+                this.speed = Math.random() * 10 + 6;
+                this.size = Math.random() * 1 + 0.1;
+                this.dir = Math.PI / 4; // Diagonal down
+                this.life = 1;
+            }
+            update() {
+                this.x -= this.speed;
+                this.y += this.speed;
+                this.life -= 0.02;
+            }
+            draw(ctx) {
+                if (this.life <= 0) return;
+                ctx.save();
+                ctx.globalAlpha = this.life;
+                ctx.strokeStyle = "rgba(255, 255, 255, " + this.life + ")";
+                ctx.lineWidth = this.size;
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y);
+                ctx.lineTo(this.x + this.len, this.y - this.len);
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+
+        function trySpawnShootingStar() {
+            if (Math.random() < 0.02) { // 2% chance per frame
+                shootingStars.push(new ShootingStar());
+            }
+        }
+
+        /**
+         * FIREFLIES
+         */
+        const fireflies = [];
+        class Firefly {
+            constructor() {
+                this.x = Math.random() * width;
+                this.y = height - (Math.random() * 200); // Bottom 200px
+                this.phase = Math.random() * Math.PI * 2;
+                this.speed = 0.02 + Math.random() * 0.02;
+                this.radius = Math.random() * 2 + 1;
+            }
+            update() {
+                this.phase += this.speed;
+                this.y -= Math.sin(this.phase) * 0.5; // Bob up and down
+                this.x += Math.cos(this.phase) * 0.5; // Bob left and right
+                // Wrap around screen
+                if (this.x > width + 10) this.x = -10;
+                if (this.x < -10) this.x = width + 10;
+            }
+            draw(ctx) {
+                ctx.save();
+                const alpha = (Math.sin(this.phase * 3) + 1) / 2 * 0.8 + 0.2; // Blink
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = "#ccff00"; // Firefly green/yellow
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = "#ccff00";
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+        function initFireflies() {
+            for (let i = 0; i < 30; i++) fireflies.push(new Firefly());
+        }
+        initFireflies();
+
+        /**
+         * MOON
+         */
+        function drawMoon(ctx) {
+            ctx.save();
+            ctx.shadowBlur = 50;
+            ctx.shadowColor = "#ffffff";
+            ctx.fillStyle = "#fffae3"; // Weak pleasant yellow
+            ctx.beginPath();
+            ctx.arc(width - 100, 100, 40, 0, Math.PI * 2); // Top right
+            ctx.fill();
+            ctx.restore();
+        }
+
+        /**
+         * TYPEWRITER LOGIC
+         */
+        const textElement = document.getElementById('typewriter-text');
+
+        async function runTypewriter() {
+            const lines = CONFIG.textSequence;
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                textElement.textContent = ""; // Clear previous line (or we could append)
+
+                // If it's the last line, we allow the tree to start AFTER typing
+                // For other lines, we type, wait, then clear/next.
+
+                // Typing effect
+                for (let char of line) {
+                    textElement.textContent += char;
+                    // Slower typing: 150ms to 250ms per character
+                    await wait(Math.random() * 100 + 150);
+                }
+
+                // Wait after finishing a line
+                await wait(1500);
+
+                // If not last line, clear it (optional: fade out effect could be here)
+                // We keep the last line visible for Phase 2
+            }
+
+            // Phase 1 Complete
+            state.phase = 1;
+            initTree();
+            document.getElementById('text-container').classList.add('pulse');
+        }
+
+        function wait(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        // Start Typewriter immediately
+        runTypewriter();
+
+        /**
+         * FRACTAL TREE LOGIC
+         */
+
+        class Branch {
+            constructor(x, y, dir, len, depth, parent = null) {
+                this.x = x;
+                this.y = y;
+                this.dir = dir; // Angle in radians
+                this.targetLen = len;
+                this.currentLen = 0;
+                this.depth = depth;
+                this.parent = parent;
+                this.finished = false;
+                this.children = [];
+                this.thickness = Math.max(1, (CONFIG.tree.maxDepth - depth) * 1.5);
+
+                // Calculate end point strictly for drawing? 
+                // No, we calculate current end point based on currentLen
+            }
+
+            update() {
+                if (this.finished) {
+                    // Update children
+                    this.children.forEach(child => child.update());
+                    return;
+                }
+
+                // Grow faster
+                this.currentLen += (this.targetLen - this.currentLen) * 0.2 + 2;
+
+                if (this.currentLen >= this.targetLen - 1) {
+                    this.currentLen = this.targetLen;
+                    this.finished = true;
+
+                    // Spawn children if not max depth
+                    if (this.depth < CONFIG.tree.maxDepth) {
+                        this.spawnChildren();
+                    } else {
+                        // Max depth reached -> Register bloom spot
+                        spawnHeart(this.getEndX(), this.getEndY());
+                    }
+                }
+            }
+
+            spawnChildren() {
+                const endX = this.getEndX();
+                const endY = this.getEndY();
+
+                // Randomize slightly
+                const variance = 0.1;
+                const leftAngle = this.dir - CONFIG.tree.branchAngle + (Math.random() * variance - variance / 2);
+                const rightAngle = this.dir + CONFIG.tree.branchAngle + (Math.random() * variance - variance / 2);
+
+                const nextLen = this.targetLen * CONFIG.tree.branchWidthFactor;
+
+                this.children.push(new Branch(endX, endY, leftAngle, nextLen, this.depth + 1, this));
+                this.children.push(new Branch(endX, endY, rightAngle, nextLen, this.depth + 1, this));
+            }
+
+            getEndX() {
+                return this.x + Math.cos(this.dir) * this.currentLen;
+            }
+
+            getEndY() {
+                return this.y + Math.sin(this.dir) * this.currentLen;
+            }
+
+            draw(ctx) {
+                // Calculate swayed position for drawing
+                const windOffset = Math.sin(state.frame * 0.02 + this.depth) * 0.02 * (this.depth * 0.5);
+                const drawDir = this.dir + windOffset;
+
+                const endX = this.x + Math.cos(drawDir) * this.currentLen;
+                const endY = this.y + Math.sin(drawDir) * this.currentLen;
+
+                // Gradient for wood
+                // We use simple line stroke for performance/style
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y);
+                ctx.lineTo(endX, endY);
+
+                // Color interpolation based on depth
+                // Darker at bottom, slightly lighter at tips
+                ctx.strokeStyle = `rgb(${74 - this.depth * 2}, ${63 - this.depth * 2}, ${63 - this.depth * 2})`; // #4a3f3f base
+                ctx.lineWidth = this.thickness;
+                ctx.lineCap = "round";
+                ctx.stroke();
+
+                this.children.forEach(child => child.draw(ctx));
+            }
+        }
+
+        let rootBranch;
+
+        function initTree() {
+            // Origin: Bottom Center
+            // Initial direction: -PI/2 (Up)
+            rootBranch = new Branch(width / 2, height, -Math.PI / 2, CONFIG.tree.startLength, 0);
+        }
+
+        /**
+         * BLOOM / HEARTS / ANTIGRAVITY
+         */
+        const hearts = [];
+
+        class Heart {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.size = 0;
+                this.targetSize = Math.random() * 10 + 5;
+                this.growSpeed = 0.5; // Faster blooming
+                this.color = CONFIG.colors.pinks[Math.floor(Math.random() * CONFIG.colors.pinks.length)];
+                this.bloomed = false;
+
+                // Antigravity props
+                this.floating = false;
+                // Faster floating
+                this.floatSpeed = Math.random() * 2 + 1;
+                this.swayOffset = Math.random() * 100;
+                this.alpha = 1;
+            }
+
+            update() {
+                // Growth Phase
+                if (!this.bloomed) {
+                    this.size += this.growSpeed;
+                    if (this.size >= this.targetSize) {
+                        this.size = this.targetSize;
+                        this.bloomed = true;
+
+                        // Decide if it should float immediately or wait?
+                        // Let's make them float after a random delay or just strictly logic
+                        // "Once fully bloomed, some hearts should detach"
+                        if (Math.random() > 0.3) {
+                            setTimeout(() => { this.floating = true; }, Math.random() * 5000 + 1000);
+                        }
+                    }
+                }
+
+                // Floating Phase
+                if (this.floating) {
+                    this.y -= this.floatSpeed; // Go Up
+                    this.x += Math.sin((state.frame + this.swayOffset) * 0.02) * 0.5; // Sway
+                    this.alpha -= 0.002;
+                }
+            }
+
+            draw(ctx) {
+                if (this.alpha <= 0) return;
+
+                ctx.save();
+                ctx.globalAlpha = this.alpha;
+                ctx.translate(this.x, this.y);
+
+                // Heartbeat Pulse (only when attached)
+                let scale = this.size / 10;
+                if (this.bloomed && !this.floating) {
+                    scale += Math.sin(state.frame * 0.1) * 0.05;
+                }
+
+                // Glow effect
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = this.color;
+
+                // Radial Gradient for 3D look
+                const grd = ctx.createRadialGradient(0, -5, 1, 0, 0, 15);
+                grd.addColorStop(0, "#ffebef"); // Highlight
+                grd.addColorStop(0.4, this.color);
+                grd.addColorStop(1, "#8b0046"); // Shadow
+
+                // Draw Heart Shape using Bezier Curves
+                ctx.fillStyle = grd;
+                ctx.beginPath();
+
+                // Standard heart path with dynamic scale
+                const s = scale;
+
+                ctx.moveTo(0, 0);
+                ctx.bezierCurveTo(-5 * s, -5 * s, -10 * s, 0, 0, 10 * s);
+                ctx.bezierCurveTo(10 * s, 0, 5 * s, -5 * s, 0, 0);
+
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        function spawnHeart(x, y) {
+            hearts.push(new Heart(x, y));
+        }
+
+        /**
+         * MAIN LOOP
+         */
+        function animate() {
+            requestAnimationFrame(animate);
+            state.frame++;
+
+            // Clear Canvas
+            ctx.clearRect(0, 0, width, height);
+
+            // Draw Sky (Moon & Stars)
+            drawMoon(ctx);
+            stars.forEach(star => { star.update(); star.draw(ctx); });
+
+            // Shooting Stars
+            trySpawnShootingStar();
+            shootingStars.forEach((s, i) => {
+                s.update();
+                s.draw(ctx);
+                if (s.life <= 0) shootingStars.splice(i, 1);
+            });
+
+            // Draw Sparkles
+            sparkles.forEach((s, i) => {
+                s.update();
+                s.draw(ctx);
+                if (s.life <= 0 || s.size <= 0) sparkles.splice(i, 1);
+            });
+
+            // Draw Fireflies
+            fireflies.forEach(f => { f.update(); f.draw(ctx); });
+
+            // Phase 1: Just handled by DOM overlay, but canvas is clear.
+
+            // Phase 2: Tree Growth
+            if (state.phase >= 1 && rootBranch) {
+                rootBranch.update();
+                rootBranch.draw(ctx);
+            }
+
+            // Phase 3: Hearts (Handled within tree update logic via spawnHeart)
+            // But we need to update/draw hearts separately
+            hearts.forEach((heart, index) => {
+                heart.update();
+                heart.draw(ctx);
+
+                // Cleanup invisible hearts
+                if (heart.alpha <= 0) {
+                    hearts.splice(index, 1);
+                }
+            });
+        }
+
+        animate();
+
+    </script>
+</body>
+
+</html>
