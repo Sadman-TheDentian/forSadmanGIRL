@@ -15,11 +15,33 @@
 
         body {
             background-color: #000000;
+            background: radial-gradient(circle at bottom, #000000 0%, #000000 100%);
+            /* Start Black */
             overflow: hidden;
             /* Prevent scrollbars */
             height: 100vh;
             width: 100vw;
             font-family: 'Courier New', Courier, monospace;
+            transition: background 5s ease-in-out;
+        }
+
+        body.dawn {
+            background: radial-gradient(circle at bottom, #2b102f 0%, #090910 60%, #000000 100%);
+        }
+
+        /* Subtle drifting animation for the background */
+        @keyframes auroraMove {
+            0% {
+                background-position: 50% 100%;
+            }
+
+            50% {
+                background-position: 50% 90%;
+            }
+
+            100% {
+                background-position: 50% 100%;
+            }
         }
 
         /* Canvas Layer */
@@ -125,9 +147,16 @@
             },
             textSequence: [
                 "Hey Rima...",
-                "I was thinking about us.",
-                "Just wanted to remind you...",
-                "You mean everything to me.",
+                "I was sitting here, thinking about everything.",
+                "About the way you light up my world...",
+                "Like stars in a midnight sky.",
+                "You are the quiet peace in my chaos.",
+                "The beautiful melody in my silence.",
+                "I wanted to build something for you...",
+                "Something that grows, just like my love.",
+                "Deep roots. Strong branches. Infinite blooms.",
+                "You mean more to me than I can ever explain.",
+                "So I'll just say this...",
                 "I love you. ❤️"
             ],
             tree: {
@@ -397,7 +426,9 @@
             // Phase 1 Complete
             state.phase = 1;
             initTree();
+            initTree();
             document.getElementById('text-container').classList.add('pulse');
+            document.body.classList.add('dawn'); // Trigger background change
         }
 
         function wait(ms) {
