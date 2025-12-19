@@ -90,6 +90,20 @@
                 text-shadow: 0px 0px 20px rgba(255, 183, 197, 1);
             }
         }
+
+        /* Mobile Adjustments */
+        @media (max-width: 768px) {
+            #text-container {
+                top: 25%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                /* Center horizontally and vertically */
+                text-align: center;
+                width: 90%;
+                font-size: 1.1rem;
+                /* Slightly smaller font */
+            }
+        }
     </style>
 </head>
 
@@ -135,6 +149,16 @@
         function resize() {
             width = canvas.width = window.innerWidth;
             height = canvas.height = window.innerHeight;
+
+            // Responsive Tree Config
+            // On mobile, making the tree smaller and slightly less complex for performance
+            if (width < 600) {
+                CONFIG.tree.startLength = height * 0.22; // Dynamic height based on screen
+                CONFIG.tree.maxDepth = 8; // Reduce depth for mobile performance
+            } else {
+                CONFIG.tree.startLength = 150;
+                CONFIG.tree.maxDepth = 10;
+            }
         }
         window.addEventListener('resize', resize);
         resize();
@@ -175,8 +199,8 @@
                 if (this.life <= 0) return;
                 ctx.save();
                 ctx.globalAlpha = this.life;
-                ctx.shadowBlur = 5;
-                ctx.shadowColor = this.color;
+                // Optimization: Use additive blending instead of shadowBlur
+                ctx.globalCompositeOperation = 'lighter';
                 ctx.fillStyle = this.color;
                 ctx.beginPath();
                 ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
@@ -192,6 +216,15 @@
         window.addEventListener('touchmove', e => {
             handleInteraction(e.touches[0].clientX, e.touches[0].clientY);
         });
+        window.addEventListener('touchstart', e => {
+            e.preventDefault(); // Prevent scrolling on mobile
+            handleInteraction(e.touches[0].clientX, e.touches[0].clientY);
+
+            // Also triggers click-like appearance (spawn heart)
+            spawnHeart(e.touches[0].clientX, e.touches[0].clientY);
+            hearts[hearts.length - 1].bloomed = true;
+            hearts[hearts.length - 1].floating = true;
+        }, { passive: false });
         window.addEventListener('click', e => {
             spawnHeart(e.clientX, e.clientY);
             hearts[hearts.length - 1].bloomed = true; // Instant bloom
@@ -203,9 +236,11 @@
             state.interaction.y = y;
             state.interaction.active = true;
 
-            // Spawn sparkles on move
-            for (let i = 0; i < 3; i++) {
-                sparkles.push(new Sparkle(x, y));
+            // Limit sparkle spawn rate
+            if (Math.random() < 0.3) {
+                for (let i = 0; i < 2; i++) {
+                    sparkles.push(new Sparkle(x, y));
+                }
             }
         }
 
@@ -303,9 +338,8 @@
                 ctx.save();
                 const alpha = (Math.sin(this.phase * 3) + 1) / 2 * 0.8 + 0.2; // Blink
                 ctx.globalAlpha = alpha;
-                ctx.fillStyle = "#ccff00"; // Firefly green/yellow
-                ctx.shadowBlur = 10;
-                ctx.shadowColor = "#ccff00";
+                ctx.globalCompositeOperation = 'lighter'; // Optimization
+                ctx.fillStyle = "#ccff00";
                 ctx.beginPath();
                 ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
                 ctx.fill();
@@ -535,9 +569,9 @@
                     scale += Math.sin(state.frame * 0.1) * 0.05;
                 }
 
-                // Glow effect
-                ctx.shadowBlur = 10;
-                ctx.shadowColor = this.color;
+                // Glow effect OFF - Too expensive
+                // ctx.shadowBlur = 10;
+                // ctx.shadowColor = this.color;
 
                 // Radial Gradient for 3D look
                 const grd = ctx.createRadialGradient(0, -5, 1, 0, 0, 15);
@@ -580,19 +614,22 @@
             stars.forEach(star => { star.update(); star.draw(ctx); });
 
             // Shooting Stars
+            // Shooting Stars (Reverse loop for safe splicing)
             trySpawnShootingStar();
-            shootingStars.forEach((s, i) => {
+            for (let i = shootingStars.length - 1; i >= 0; i--) {
+                const s = shootingStars[i];
                 s.update();
                 s.draw(ctx);
                 if (s.life <= 0) shootingStars.splice(i, 1);
-            });
+            }
 
-            // Draw Sparkles
-            sparkles.forEach((s, i) => {
+            // Draw Sparkles (Reverse loop)
+            for (let i = sparkles.length - 1; i >= 0; i--) {
+                const s = sparkles[i];
                 s.update();
                 s.draw(ctx);
                 if (s.life <= 0 || s.size <= 0) sparkles.splice(i, 1);
-            });
+            }
 
             // Draw Fireflies
             fireflies.forEach(f => { f.update(); f.draw(ctx); });
@@ -605,17 +642,15 @@
                 rootBranch.draw(ctx);
             }
 
-            // Phase 3: Hearts (Handled within tree update logic via spawnHeart)
-            // But we need to update/draw hearts separately
-            hearts.forEach((heart, index) => {
+            // Phase 3: Hearts (Reverse loop)
+            for (let i = hearts.length - 1; i >= 0; i--) {
+                const heart = hearts[i];
                 heart.update();
                 heart.draw(ctx);
-
-                // Cleanup invisible hearts
                 if (heart.alpha <= 0) {
-                    hearts.splice(index, 1);
+                    hearts.splice(i, 1);
                 }
-            });
+            }
         }
 
         animate();
